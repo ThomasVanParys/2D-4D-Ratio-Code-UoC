@@ -1,1 +1,184 @@
-2D:4D code
+# ==============================
+# 2D:4D Ratio Study Analysis
+# ==============================
+
+# Load libraries
+library(tidyverse)
+library(ggpubr)
+library(rstatix)
+library(effsize)
+library(psych)
+library(irr)
+
+# ------------------------------
+# 1. Load Data
+# ------------------------------
+left_df <- read.csv("C:/Users/Thomas/OneDrive/Documents/Postgraduate/HAC Supernumerary/2D-4D/Left2D4D.csv")
+right_df <- read.csv("C:/Users/Thomas/OneDrive/Documents/Postgraduate/HAC Supernumerary/2D-4D/Right2D4D.csv")
+
+
+t.test(X2D.mean. ~ Sex, data = left_df)
+t.test(X4D.mean. ~ Sex, data = left_df)
+t.test(X2D.mean. ~ Sex, data = right_df)
+t.test(X4D.mean. ~ Sex, data = right_df)
+
+
+# ------------------------------
+# 2. Merge Left and Right
+# ------------------------------
+metadata <- left_df %>%
+  select(Subject, Sex, Handedness, X2D.4D) %>%
+  rename(L = X2D.4D) %>%
+  left_join(
+    right_df %>% select(Subject, X2D.4D) %>% rename(R = X2D.4D),
+    by = "Subject"
+  )
+
+# Long format for plotting and ANOVA
+metadata_long <- metadata %>%
+  pivot_longer(cols = c(R, L), names_to = "Hand", values_to = "X2D4D") %>%
+  mutate(
+    Sex = factor(Sex, levels = c("F", "M")),
+    Hand = factor(Hand, levels = c("R", "L")),
+    Handedness = factor(Handedness),
+    Subject = as.factor(Subject)
+  )
+
+# ------------------------------
+# 3. Descriptive Statistics
+# ------------------------------
+# Overall mean and SD
+metadata_long %>%
+  summarise(
+    N = n_distinct(Subject),
+    Mean_2D4D = mean(X2D4D, na.rm = TRUE),
+    SD_2D4D = sd(X2D4D, na.rm = TRUE)
+  )
+
+# By Sex and Hand
+metadata_long %>%
+  group_by(Sex, Hand) %>%
+  summarise(
+    N = n(),
+    Mean = mean(X2D4D, na.rm = TRUE),
+    SD = sd(X2D4D, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# By Handedness and Hand
+metadata_long %>%
+  group_by(Handedness, Hand) %>%
+  summarise(
+    N = n(),
+    Mean = mean(X2D4D, na.rm = TRUE),
+    SD = sd(X2D4D, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# ------------------------------
+# 4. Normality Check
+# ------------------------------
+shapiro.test(metadata_long$X2D4D[metadata_long$Hand=="R"]) # R-hand
+shapiro.test(metadata_long$X2D4D[metadata_long$Hand=="L"]) # L-hand
+
+# ------------------------------
+# 5. Paired Tests: R vs L
+# ------------------------------
+# Parametric
+t_test_paired <- t.test(metadata$R, metadata$L, paired = TRUE)
+print(t_test_paired)
+
+# Non-parametric (due to non-normality of R-hand)
+wilcox_paired <- wilcox.test(metadata$R, metadata$L, paired = TRUE)
+print(wilcox_paired)
+
+# Effect size for paired samples
+diffs <- metadata$R - metadata$L
+cohen_d_paired <- mean(diffs)/sd(diffs)
+cohen_d_paired
+
+# ------------------------------
+# 6. Sexual Dimorphism Tests
+# ------------------------------
+# Right hand
+t_test_R <- t.test(X2D4D ~ Sex, data = metadata_long %>% filter(Hand=="R"))
+wilcox_R <- wilcox.test(X2D4D ~ Sex, data = metadata_long %>% filter(Hand=="R"))
+print(t_test_R)
+print(wilcox_R)
+
+# Left hand
+t_test_L <- t.test(X2D4D ~ Sex, data = metadata_long %>% filter(Hand=="L"))
+wilcox_L <- wilcox.test(X2D4D ~ Sex, data = metadata_long %>% filter(Hand=="L"))
+print(t_test_L)
+print(wilcox_L)
+
+# ------------------------------
+# 7. Mixed ANOVA: Hand × Sex
+# ------------------------------
+anova_hand_sex <- metadata_long %>%
+  anova_test(dv = X2D4D, wid = Subject, within = Hand, between = Sex)
+get_anova_table(anova_hand_sex)
+
+# Mixed ANOVA: Hand × Handedness
+anova_hand_handed <- metadata_long %>%
+  anova_test(dv = X2D4D, wid = Subject, within = Hand, between = Handedness)
+get_anova_table(anova_hand_handed)
+
+# 3-way ANOVA: Hand × Sex × Handedness
+anova_3way <- metadata_long %>%
+  anova_test(dv = X2D4D, wid = Subject, within = Hand, between = c(Sex, Handedness))
+get_anova_table(anova_3way)
+
+# ------------------------------
+# 8. Asymmetry: R - L and Asymmetry Index
+# ------------------------------
+metadata <- metadata %>%
+  mutate(
+    Asymmetry = R - L,
+    AI = (R - L) / ((R + L)/2)
+  )
+
+# Summary statistics by Sex
+metadata %>%
+  group_by(Sex) %>%
+  summarise(
+    Mean_Asymmetry = mean(Asymmetry, na.rm = TRUE),
+    SD_Asymmetry = sd(Asymmetry, na.rm = TRUE),
+    Mean_AI = mean(AI, na.rm = TRUE),
+    SD_AI = sd(AI, na.rm = TRUE)
+  )
+
+# One-sample t-test for asymmetry ≠ 0
+t.test(metadata$Asymmetry, mu = 0)
+
+# Asymmetry by Sex
+t.test(Asymmetry ~ Sex, data = metadata)
+wilcox.test(Asymmetry ~ Sex, data = metadata)
+
+# Asymmetry by Handedness
+t.test(Asymmetry ~ Handedness, data = metadata)
+wilcox.test(Asymmetry ~ Handedness, data = metadata)
+
+
+# Assuming left_df has Age and Subject
+metadata_full <- metadata %>%
+  left_join(left_df %>% select(Subject, Age), by = "Subject")
+# Now check
+str(metadata_full)
+# Then correlations
+cor.test(metadata_full$Age, metadata_full$R)  # Right hand
+cor.test(metadata_full$Age, metadata_full$L)  # Left hand
+cor.test(metadata_full$Age, metadata_full$Asymmetry)  # Optional
+
+
+# ------------------------------
+# 9. Plots
+# ------------------------------
+# Boxplot: 2D:4D by Hand and Sex
+pal_sex <- c("F" = "#E69F00", "M" = "#56B4E9")
+ggplot(metadata_long, aes(x = Hand, y = X2D4D, fill = Sex)) +
+  geom_boxplot(alpha = 0.7) +
+  geom_jitter(position = position_jitterdodge(jitter.width = 0.1), alpha = 0.2) +
+  scale_fill_manual(values = pal_sex) +
+  labs(title = "2D:4D Ratio by Hand and Sex", y = "2D:4D Ratio", x = "Hand") +
+  theme_minimal()
