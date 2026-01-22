@@ -13,8 +13,8 @@ library(irr)
 # ------------------------------
 # 1. Load Data
 # ------------------------------
-left_df <- read.csv("C:/Users/Thomas/OneDrive/Documents/Postgraduate/HAC Supernumerary/2D-4D/Left2D4D.csv")
-right_df <- read.csv("C:/Users/Thomas/OneDrive/Documents/Postgraduate/HAC Supernumerary/2D-4D/Right2D4D.csv")
+left_df <- read.csv(".csv")
+right_df <- read.csv(".csv")
 
 
 t.test(X2D.mean. ~ Sex, data = left_df)
